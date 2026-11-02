@@ -1,106 +1,29 @@
-# ============================================================
-# ① Hugging Face 감정분석 관련 함수 가져오기
-# ============================================================
-# hf_model.py에서 앞서 작성한 두 함수를 가져옵니다.
-#
-# get_classifier()
-# : Hugging Face 감정분석 모델 객체를 가져오는 함수
-#
-# normalize_prediction()
-# : AI 분석 결과를 label과 score 형식으로 정리하는 함수
+import hashlib
+import json
+from redis import Redis
+from .hf_model import MODEL_ID, get_classifier, normalize_prediction
+from .settings import REDIS_CACHE_URL, CACHE_SECONDS
 
-from .hf_model import get_classifier, normalize_prediction
+# Redis 연결은 Python 프로세스별로 생성합니다. 서버 실행시 연결을 강제하지 않습니다.
+redis_cache = Redis.from_url(REDIS_CACHE_URL, decode_responses=True, socket_connect_timeout=3)
 
+def cache_key(text: str) -> str:
+    key_input = (MODEL_ID + "\n" + text.strip()).encode("utf-8")
+    return "sentiment:analysis:" + hashlib.sha256(key_input).hexdigest()
 
-# ============================================================
-# ② 감정분석 서비스 함수 정의
-# ============================================================
-# analyze_text() : 입력 문장을 AI로 분석하는 공통 함수
-#
-# text: str  : 분석할 문장을 문자열로 전달받음
-# -> dict   : 분석 결과를 딕셔너리로 반환
-#
-# 이 함수는 생성(Create)과 수정(Update) 기능에서
-# 공통으로 호출하여 사용합니다.
-
-def analyze_text(text: str) -> dict:
-    """
-    입력된 문장 하나를 AI 모델로 감정분석하고,
-    label과 score를 반환합니다.
-
-    HTTP 요청 처리와 DB 저장은 담당하지 않습니다.
-    """
-
-
-    # --------------------------------------------------------
-    # ③ 입력 문장의 앞뒤 공백 제거
-    # --------------------------------------------------------
-    # strip() : 문자열 양쪽의 공백을 제거합니다.
-    #
-    # 예: "  오늘 기분이 좋아요  "
-    #     → "오늘 기분이 좋아요"
-
-    cleaned = text.strip()
-
-
-    # --------------------------------------------------------
-    # ④ 빈 문장인지 검사
-    # --------------------------------------------------------
-    # cleaned가 빈 문자열이면 분석을 진행하지 않습니다.
-    #
-    # raise ValueError()
-    # : 잘못된 입력값이라는 오류를 발생시킵니다.
-    #
-    # 참고:
-    # 문장 길이 1~500자 검사는 router.py에서 수행합니다.
-
+def analyze_text(text: str, use_cache: bool = False) -> dict:
+    """동기 API에선 use_cache=False, Celery 워커에선 True로 실행합니다."""
+    cleaned = (text or "").strip()
     if not cleaned:
-        raise ValueError(
-            "빈 문장은 분석할 수 없습니다."
-        )
-
-
-    # --------------------------------------------------------
-    # ⑤ Hugging Face 감정분석 모델 가져오기
-    # --------------------------------------------------------
-    # hf_model.py의 get_classifier() 함수를 호출합니다.
-    #
-    # 최초 호출 시 모델을 로딩하고,
-    # 이후에는 캐시된 모델 객체를 재사용합니다.
-
+        raise ValueError("빈 문장은 분석할 수 없습니다.")
+    key = cache_key(cleaned)
+    if use_cache:
+        cached = redis_cache.get(key)
+        if cached is not None:
+            return json.loads(cached)
     classifier = get_classifier()
-
-
-    # --------------------------------------------------------
-    # ⑥ 입력 문장에 대한 AI 감정분석 실행
-    # --------------------------------------------------------
-    # classifier() : 실제 감정분석을 수행합니다.
-    #
-    # cleaned         : 분석할 문장
-    # truncation=True : 입력 토큰이 너무 길면 잘라서 처리
-    # max_length=512  : 최대 입력 토큰 수 지정
-    #
-    # output에는 Hugging Face 모델의 예측 결과가 저장됩니다.
-
-    output = classifier(
-        cleaned,
-        truncation=True,
-        max_length=512
-    )
-
-
-    # --------------------------------------------------------
-    # ⑦ AI 분석 결과를 정리하여 반환
-    # --------------------------------------------------------
-    # normalize_prediction()
-    # : Hugging Face 결과에서 label과 score를 추출합니다.
-    #
-    # 예시 반환값:
-    # {
-    #     "label": "Positive",
-    #     "score": 0.95
-    # }
-    #
-    # 정리된 결과를 호출한 router.py에 전달합니다.
-
-    return normalize_prediction(output)
+    output = classifier(cleaned, truncation=True, max_length=512)
+    result = normalize_prediction(output)
+    if use_cache:
+        redis_cache.setex(key, CACHE_SECONDS, json.dumps(result, ensure_ascii=False))
+    return result
