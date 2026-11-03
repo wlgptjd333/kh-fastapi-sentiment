@@ -6,3 +6,4 @@ sentiment.db
 .env
 .env.*
 !.env.example
+backups/

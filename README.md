@@ -1,17 +1,24 @@
 # FastAPI Sentiment
 
-Hugging Face 감정분석 모델을 FastAPI에 연결하는 교육 실습 (교재 `FastAPI_HuggingFace/LLM` 02 → 04 → 06).
+Hugging Face 감정분석 모델을 FastAPI에 연결하는 교육 실습 (교재 `FastAPI_HuggingFace/LLM` 02 → 04 → 06 → 06-20).
 
 | 태그 | 내용 |
 |---|---|
 | `step-02` | `/predict/`: 입력 → 모델 추론 → 화면 |
 | `step-04` | `/new/`, `/items/`: SQLite 저장, 목록·상세·수정·삭제 |
 | `step-06` | Redis·Celery로 `/new/` 분석을 Worker에서 처리, 결과 캐시 |
+| `step-06-pg` | 저장소를 SQLite → Docker PostgreSQL(5433)로 변경, DBeaver로 확인 |
 
 ## 실행 (터미널 3개)
 
-Docker Desktop을 먼저 켠다.
-Redis 주소는 `.env`에서 읽는다 (Git에 올리지 않음). 처음이면 `cp .env.example .env` 후 값을 채운다.
+Docker Desktop을 먼저 켠다. `docker compose up -d`가 Redis(6380)와 PostgreSQL(5433)을 함께 띄운다.
+DB·Redis 주소와 PostgreSQL 계정은 `.env`에서 읽는다 (Git에 올리지 않음). 처음이면:
+
+```bash
+cp .env.example .env   # 값 채우기
+```
+
+`.env`를 바꾸면 FastAPI와 Worker를 둘 다 다시 켠다.
 
 ```bash
 cd ~/fastapi_sentiment && docker compose up -d
@@ -32,10 +39,16 @@ cd ~/fastapi_sentiment && source .venv/bin/activate && python -m uvicorn main:ap
 ## 테스트
 
 ```bash
-python -m pytest -q
+DATABASE_URL=sqlite:////tmp/test_sentiment.db python -m pytest -q
 ```
 
-테스트는 실제 `sentiment.db`에 테스트 글을 남긴다.
+테스트는 DB에 글을 쓰고 지운다. 그냥 돌리면 `.env`의 PostgreSQL 실습 데이터에 섞이므로 위처럼 임시 SQLite로 돌린다.
+
+## DB 확인
+
+- 터미널: `docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM text_items"'`
+- DBeaver: PostgreSQL, Host `127.0.0.1`, Port `5433`, DB·사용자·비밀번호는 `.env` 값
+- PostgreSQL 전환 전 SQLite DB는 `backups/sentiment_before_postgresql.db`에 있다 (Git 제외)
 
 ## 측정 결과 (RTX 3060)
 

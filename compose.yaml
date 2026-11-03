@@ -143,6 +143,33 @@ services:
       retries: 10
 
 
+  # ==========================================================
+  # ⑫ PostgreSQL 서비스 (06-20 최종 확장 실습에서 추가)
+  # ==========================================================
+  # 감정분석 문장·결과·상태를 영구 저장하는 DB 서버
+  # 5433 : 로컬 PC 포트 (기본 5432를 쓰는 다른 PostgreSQL과 충돌 방지)
+  # 5432 : 컨테이너 내부 포트
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: sentiment-postgres
+    restart: unless-stopped
+    environment:
+      # 계정·비밀번호는 .env에서 읽음 (docker compose가 같은 폴더의 .env를 자동으로 읽는다)
+      POSTGRES_USER: ${POSTGRES_USER:?.env에 POSTGRES_USER 필요}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env에 POSTGRES_PASSWORD 필요}
+      POSTGRES_DB: ${POSTGRES_DB:?.env에 POSTGRES_DB 필요}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
 # ============================================================
 # ⑪ Docker 볼륨 생성 및 관리 설정
 # ============================================================
@@ -159,3 +186,4 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:

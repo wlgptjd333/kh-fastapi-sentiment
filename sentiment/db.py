@@ -1,48 +1,50 @@
 # ============================================================
-# ① SQLAlchemy 라이브러리 가져오기
+# ① 라이브러리 가져오기
 # ============================================================
+# os, Path       : .env 위치를 찾고 환경변수를 읽기 위해 사용
+# load_dotenv    : .env 파일의 값을 환경변수로 불러옴
 # create_engine   : 데이터베이스 연결을 관리하는 엔진 생성
 # DeclarativeBase : ORM 모델의 부모 클래스
 # sessionmaker    : DB 작업용 세션을 생성하는 도구
 
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
 # ============================================================
-# ② SQLite 데이터베이스 경로 설정
+# ② .env에서 PostgreSQL 주소 읽기 (06-20에서 SQLite → PostgreSQL로 변경)
 # ============================================================
-# sqlite:///./sentiment.db
-# : 현재 작업 폴더의 sentiment.db 파일 사용
+# 프로젝트 루트(fastapi_sentiment/.env)의 DATABASE_URL을 읽습니다.
 #
-# DB 파일이 없다면 실제 DB 연결 시 생성될 수 있습니다.
+# 형식: postgresql+psycopg://<사용자>:<비밀번호>@127.0.0.1:5433/<DB이름>  (.env.example 참고)
 #
-# 주의:
-# 04·06 실습은 같은 프로젝트 루트에서 실행합니다.
+# FastAPI와 Celery Worker가 같은 .env를 읽어야
+# 같은 DB를 보고 비동기 작업이 DONE까지 갑니다.
+#
+# 04·06에서 쓰던 SQLite 주소: sqlite:///./sentiment.db
 
-DATABASE_URL = "sqlite:///./sentiment.db"
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(".env의 DATABASE_URL을 설정해 주세요.")
 
 
 # ============================================================
 # ③ 데이터베이스 엔진 생성
 # ============================================================
-# create_engine() : DB 연결을 관리하는 엔진을 준비
+# pool_pre_ping=True
+# : 연결을 꺼내 쓰기 전에 살아 있는지 확인
+#   (DB 컨테이너를 재시작해도 끊긴 연결로 오류가 나지 않게)
 #
-# DATABASE_URL : ②에서 지정한 SQLite 경로
-#
-# check_same_thread=False
-# : SQLite 연결을 생성한 스레드와 다른 스레드에서도
-#   사용할 수 있도록 허용하는 설정
-#
-# 단, 하나의 세션을 여러 요청이 동시에 공유해도
-# 안전하다는 의미는 아닙니다.
+# SQLite 전용 옵션 check_same_thread=False는 제거했습니다.
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={
-        "check_same_thread": False
-    }
-)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 # ============================================================
