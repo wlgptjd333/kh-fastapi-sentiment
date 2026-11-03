@@ -50,6 +50,20 @@ DATABASE_URL=sqlite:////tmp/test_sentiment.db python -m pytest -q
 - DBeaver: PostgreSQL, Host `127.0.0.1`, Port `5433`, DB·사용자·비밀번호는 `.env` 값
 - PostgreSQL 전환 전 SQLite DB는 `backups/sentiment_before_postgresql.db`에 있다 (Git 제외)
 
+## 다른 컴퓨터에서 이어서 작업할 때
+
+GitHub에는 코드만 있다. 아래는 Git에 올리지 않으므로 clone만으로는 실행되지 않는다.
+
+| 없는 것 | 해결 |
+|---|---|
+| `.env` (Redis·PostgreSQL 주소, 계정) | `cp .env.example .env` 후 값 채우기. 실제 값은 개인 노트(비공개)에 보관 |
+| `.venv` | `uv venv --python 3.12 && source .venv/bin/activate && uv pip install -r requirements.txt` |
+| PostgreSQL 데이터 (Docker 볼륨) | 새 PC에서는 빈 DB로 시작. `docker compose up -d` 후 FastAPI를 켜면 `text_items` 테이블이 생긴다 |
+| `sentiment.db`, `backups/` | 옮기려면 직접 복사 (선택) |
+| Hugging Face 모델 | 첫 실행 때 다시 내려받는다 (약 520MB) |
+
+`.env`가 없거나 항목이 빠지면 실행할 때 "`.env`의 ○○을 설정해 주세요" 오류가 난다. `docker compose up -d`도 `POSTGRES_PASSWORD` 등이 없으면 멈춘다.
+
 ## 측정 결과 (RTX 3060)
 
 | 항목 | 시간 |
